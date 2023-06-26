@@ -1,0 +1,16 @@
+name: Rscript Runner
+on:
+  schedule:
+    - cron: '0 0 * * *' # Roda todos os dias à meia-noite
+
+jobs:
+  Rscript:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: r-lib/actions/setup-r@v1
+    - name: Install dependencies
+      run: |
+        install.packages(c("dplyr", "tidyverse", "yfR", "rugarch", "tseries", "quantmod", "xts", "PerformanceAnalytics", "nortest", "GAS", "ggpubr", "kableExtra", "emayili"))
+    - name: Run R script
+      run: Rscript your_script.R
