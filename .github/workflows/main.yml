@@ -13,4 +13,4 @@ jobs:
       run: |
         install.packages(c("dplyr", "tidyverse", "yfR", "rugarch", "tseries", "quantmod", "xts", "PerformanceAnalytics", "nortest", "GAS", "ggpubr", "kableExtra", "emayili"))
     - name: Run R script
-      run: Rscript your_script.R
+      run: Rscript Teste Modelo.R
