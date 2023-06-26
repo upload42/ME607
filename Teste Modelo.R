@@ -10,6 +10,7 @@ library(nortest)
 library(GAS)
 library(ggpubr)
 library(kableExtra)
+library(emayili)
 
 nome_acao1 <- "UGPA3.SA"   # Código no Yahoo Finance
 data_ini1  <- "2018-01-01" # Data de inicio
@@ -27,5 +28,29 @@ spec1 <- ugarchspec(mean.model = list(armaOrder = c(0, 0), include.mean = FALSE)
 fit1 <- ugarchfit(spec1, centrada1, solver = 'hybrid')
 
 fore <- ugarchforecast(fit1, n.ahead = 1)
-fore
 
+# Salve o forecast como um CSV
+write.csv(fore, "forecast.csv")
+
+# Configurar o e-mail
+sender <- envelope(
+  from = "seriestrabalho1@gmail.com",
+  to = "a213192@dac.unicamp.br",
+  subject = "Forecast Diário",
+  body = "Segue em anexo o forecast de um passo à frente."
+)
+
+# Anexe o CSV
+sender <- sender$attach_part("forecast.csv")
+
+# Autenticação SMTP
+smtp <- server(
+  host = "smtp.gmail.com",
+  port = 465,
+  username = "seriestrabalho1@gmail.com",
+  password = "Senha_teste01",
+  secure = "ssl"
+)
+
+# Envie o e-mail
+smtp$send(sender)
