@@ -1,9 +1,5 @@
 library(blastula)
 
-create_smtp_creds_file(file="forecast1",
-                       user = "trabalho_series@outlook.com",
-                       provider = "outlook")
-
 my_email_object <- render_connect_email("Forecast.qmd")
 
 smtp_send(my_email_object,
