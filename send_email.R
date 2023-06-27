@@ -1,8 +1,3 @@
-library(dplyr)
-library(tsibble)
-library(rugarch)
-library(readr)
-library(yfR)
 library(blastula)
 
 password <- Sys.getenv("Senha_teste01")
