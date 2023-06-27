@@ -1,7 +1,7 @@
 name: Send email using Quarto and blastula
 on: 
   schedule:
-    - cron: '30 22 * * *'
+    - cron: '18 22 * * *'
 jobs:
   render:
     runs-on: windows-latest
