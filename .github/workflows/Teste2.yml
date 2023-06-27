@@ -1,0 +1,49 @@
+name: Teste2
+
+
+on:
+  schedule:
+    - cron: "05 00 * * 1-5" 
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        
+      - name: Set permissions on file
+        run: chmod 777 data/teste.csv
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 4.3.0
+          
+      - name: set up pandoc
+        uses: r-lib/actions/setup-pandoc@v2
+      
+      - name: Install dependencies
+        run: |
+          sudo apt install libcurl4-openssl-dev
+
+          R -e 'install.packages("blastula")'
+
+
+      # Run Rscript    
+      - name: Scraping
+        run: |
+          Rscript send_email.R
+          
+        # Add new files in folders and commit
+      - name: Commit
+        run: |
+          git config --local user.name github-actions
+          git config --local user.email "actions@github.com"
+          git add --all
+          git commit -am "add Data"
+          git push
+        env:
+          REPO_KEY: ${{secrets.GITHUB_TOKEN}}
+          username: github-actions
