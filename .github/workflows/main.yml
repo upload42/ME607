@@ -1,7 +1,7 @@
 name: Send email using Quarto and blastula
 on: 
   schedule:
-    - cron: '0 9 * * *'
+    - cron: '30 22 * * *'
 jobs:
   render:
     runs-on: windows-latest
@@ -12,8 +12,13 @@ jobs:
       - name: Set up pandoc
         uses: r-lib/actions/setup-pandoc@master
       - name: Install dependencies
-        run: |
-          install.packages("blastula", type = "win.binary")
+        run: 
+          R -e 'install.packages("dplyr")'
+          R -e 'install.packages("tsibble")'
+          R -e 'install.packages("rugarch")'
+          R -e 'install.packages("readr")'
+          R -e 'install.packages("yfR")'
+          R -e 'install.packages("blastula")'
         shell: Rscript {0}
       - name: Script
         run: Rscript send_email.R
