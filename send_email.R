@@ -12,7 +12,7 @@ create_smtp_creds_file(file="forecast",
                        provider = "outlook",
                        password = password)
 
-my_email_object <- render_connect_email("C:/Users/adepaula/OneDrive - Alvarez and Marsal/Documents/Faculdade/Trabalho/Forecast.qmd")
+my_email_object <- render_connect_email("Forecast.qmd")
 
 smtp_send(my_email_object,
           from = "trabalho_series@outlook.com",
