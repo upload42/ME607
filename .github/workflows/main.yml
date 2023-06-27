@@ -2,7 +2,7 @@ name: Agendador
 
 on:
   schedule:
-    - cron: '05 21 * * *' 
+    - cron: '21 21 * * *' 
 
 jobs:
   scrape:
@@ -15,15 +15,15 @@ jobs:
 
       - name: Instalar dependências
         run:  
+          R -e 'install.packages("dplyr")'
           R -e 'install.packages("tsibble")'
-          R -e 'install.packages("zoo")'
           R -e 'install.packages("rugarch")'
           R -e 'install.packages("readr")'
-          R -e 'install.packages("dplyr")'
-          R -e 'install.packages("quantmod")'
+          R -e 'install.packages("yfR")'
+       
 
       - name: Executar código
-        run: Rscript modelagem/garch_forecast.R
+        run: Rscript Forecast.R
       - name: Debug
         run: ls -R  
       - name: Commit
