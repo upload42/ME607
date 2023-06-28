@@ -44,5 +44,5 @@ jobs:
           git commit -am "add Data"
           git push
         env:
-          REPO_KEY: ${{secrets.GH_PAT}}
+          REPO_KEY: ${{secrets.GITHUB_TOKEN}}
           username: github-actions
