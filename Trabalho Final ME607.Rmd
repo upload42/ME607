@@ -1,0 +1,1294 @@
+---
+title: "Trabalho Final-ME607"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: cerulean
+runtime: shiny    
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(yfR)
+library(scales)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(tidyverse)
+library(gt)
+library(tidyverse)
+library(rugarch)
+library(tseries)
+library(quantmod)
+library(xts)
+library(PerformanceAnalytics)
+library(nortest)
+library(GAS)
+library(plotly)
+library(ggpubr)
+library(htmltools)
+library(kableExtra)
+library(knitr)
+library(htmlTable)
+library(shiny)
+library(shinyBS)
+```
+
+```{r}
+#Banco de Dados
+
+#Importação dos dados
+# Código no Yahoo Finance
+nome_acao <- c("CSAN3.SA", "ENAT3.SA", "PETR4.SA", "PRIO3.SA", "RPMG3.SA", "UGPA3.SA")   
+data_ini  <- "2018-01-01" # Data de inicio
+data_fim  <- Sys.Date() # Data de fim
+
+#Manipulação dos dados
+CSAN <- yf_get(tickers = nome_acao[1], first_date = data_ini, last_date = data_fim)
+ENAT <- yf_get(tickers = nome_acao[2], first_date = data_ini, last_date = data_fim)
+PETR <- yf_get(tickers = nome_acao[3], first_date = data_ini, last_date = data_fim)
+PRIO <- yf_get(tickers = nome_acao[4], first_date = data_ini, last_date = data_fim)
+RPMG <- yf_get(tickers = nome_acao[5], first_date = data_ini, last_date = data_fim)
+UGPA <- yf_get(tickers = nome_acao[6], first_date = data_ini, last_date = data_fim)
+
+CSAN = CSAN[-1,]
+ENAT = ENAT[-1,]
+PETR = PETR[-1,]
+PRIO = PRIO[-1,]
+RPMG = RPMG[-1,]
+UGPA = UGPA[-1,]
+
+CSAN$Empresa <- "CSAN3"
+ENAT$Empresa <- "ENAT3"
+PETR$Empresa <- "PETR3"
+PRIO$Empresa <- "PRIO3"
+RPMG$Empresa <- "RPMG3"
+UGPA$Empresa <- "UGPA3"
+
+precos <- rbind(CSAN, ENAT, PETR, PRIO, RPMG, UGPA)
+precos <- na.omit(precos)
+
+
+```
+
+
+Contexto {data-icon="fa-note-sticky" data-navmenu="Introdução"}
+===
+
+Nome: Nome: Antonio Felipe de Paula Nunes RA: 213192 |
+      Bianca Barbosa Schorles RA:232117 |
+      Lucas Tomaz RA:239931
+
+#### Contexto
+
+O mercado financeiro, em sua natureza intrincada e volátil, tem sido objeto de estudo por diversos analistas e investidores, que buscam entender e prever seus movimentos para tomar decisões de investimento mais fundamentadas (Investopedia, 2022). Modelos GARCH (Generalized Autoregressive Conditional Heteroskedasticity) têm sido amplamente empregados nesse cenário para fornecer uma visão mais profunda da volatilidade dos retornos das ações (Silvennoinen & Teräsvirta, 2009).
+
+Neste trabalho, focamos no setor de petróleo e gás listado na B3, a bolsa de valores do Brasil. Este setor foi selecionado devido ao seu impacto estratégico na economia do país e à notável volatilidade histórica que tem apresentado (Cavalcanti & Jalles, 2013). As ações de petróleo e gás são sensíveis a uma miríade de fatores, incluindo flutuações nos preços globais do petróleo, alterações regulatórias e incertezas geopolíticas, tornando-as um objeto de estudo de grande relevância (Fattouh, Kilian & Mahadeva, 2013).
+
+Os dados analisados neste estudo foram extraídos do site Yahoo Finance e compreendem o período de 01 de janeiro de 2018 até a presente data, no total cada ação possui aproximadamente 1350 observações. Na Tabela 1 realizamos uma análise descritiva dos retornos ajustados dessas empresas, considerando várias métricas estatísticas para captar uma visão geral do comportamento desses retornos ajustados ao longo do tempo (Hamilton, 1994).
+
+
+```{r}
+#Tabela Resumo: Retorno_ajustado(Summary-MEAN+MIN+MAX+DP)
+#todas tem o mesmo # de observações
+
+summary <- precos %>% group_by(Empresa) %>%
+  summarise(Média = round(mean(ret_adjusted_prices),4),
+            Mínimo = round(min(ret_adjusted_prices),4), 
+            Máximo = round(max(ret_adjusted_prices),4),
+            'Desvio Padrão' = round(sd(ret_adjusted_prices),4)) %>%
+  gt_preview() %>%
+  tab_header(md("Tabela 1: Estatísticas Sumárias dos Retornos Ajustados por Empresa")) %>%
+  tab_footnote(
+    footnote = "Fonte: Yahoo Finance"
+  )
+summary
+```
+
+A finalidade primordial deste trabalho é aplicar os modelos GARCH para estimar a volatilidade desse uma ação e calcular o Valor em Risco (VaR) e a Medida de Risco Esperado (ES) "h" passos à frente. Estas medidas de risco são amplamente utilizadas na gestão de riscos financeiros e proporcionam aos investidores uma estimativa das possíveis perdas em um determinado nível de confiança (Jorion, 2007).
+
+Para isso concentramos nossa análise no período de início de 2023 até o presente, oferecendo assim uma perspectiva mais recente sobre a dinâmica atual do mercado de ações no setor de petróleo e gás. É possível ver na Tabela 2 que a ação com a maior média de retorno ajustado atualmente é a UGPA3 que se refere a empresa Grupo Ultra e será ela a ação que iremos analisar ao longo do trabalho.
+
+```{r, tabl}
+#Ranking das ações nos últimos 5 meses            
+preco_rank <- precos %>% filter(ref_date <= "2023-06-01", ref_date >= "2023-01-01")
+
+summary_rank <- preco_rank %>% group_by(Empresa) %>%
+  summarise('Média' = round(mean(ret_adjusted_prices),4),
+            'Desvio Padrão' = round(sd(ret_adjusted_prices), 4)) %>% 
+                    arrange(desc(Média)) %>%
+  gt_preview() %>%
+  tab_header(md("Tabela 2: Ranking dos Retornos Ajustados por Empresa de (Jan-Jun de 2023)"))%>%
+  tab_footnote(
+    footnote = "Fonte: Yahoo Finance"
+  )
+summary_rank
+```
+
+
+Metodologia {data-icon="fa-book" data-navmenu="Introdução"}
+===
+
+#### Metodologia
+
+**1. Séries Temporais:** As séries temporais são conjuntos de observações coletadas sequencialmente ao longo do tempo, apresentando dependência temporal e padrões como tendência, sazonalidade e autocorrelação.
+
+**2. Retorno:** O retorno de uma ação é uma medida que indica a variação do preço de uma ação durante um determinado período de tempo. É uma métrica fundamental para os investidores, pois ajuda a avaliar o desempenho de um investimento em ações. O cálculo do retorno é baseado na diferença entre o preço final e o preço inicial, dividido pelo preço inicial.
+
+**3. Retorno Ajustado:** O retorno ajustado é uma medida que leva em consideração eventos corporativos que podem afetar o preço de uma ação, como pagamentos de dividendos ou desdobramentos de ações.
+
+**4. Volatilidade:** A volatilidade é uma medida estatística que indica a magnitude das flutuações dos preços de uma ação ou ativo financeiro ao longo do tempo. É uma medida-chave para avaliar o risco associado a um investimento. Uma volatilidade maior indica maiores variações nos preços, o que implica um risco potencialmente maior. 
+
+**5. Modelos ARMA (AutoRegressive Moving Average):** Os modelos ARMA são utilizados para descrever séries temporais estacionárias. Eles combinam termos autorregressivos (AR), que representam a relação com os valores anteriores, e termos de média móvel (MA), que representam a relação com os erros passados. Um modelo ARMA(p, q) possui p termos autorregressivos e q termos de média móvel (Brockwell & Davis, 2016).
+
+Fórmula do modelo ARMA(p, q):
+
+\begin{equation}
+X_t = c + ϕ_1*X_{t-1} + ϕ_2*X_{t-2} + ... + ϕ_p*X_{t-p} + θ_1*ε_{t-1} + θ_2*ε_{t-2} + ... + θ_q*ε_{t-q} + ε_t
+\end{equation}
+
+- $X_t$: Valor da série temporal no tempo t;
+
+- $c$: Termo constante;
+
+- $ϕ_1, ϕ_2, ..., ϕ_p$: Coeficientes dos termos autorregressivos;
+
+- $X_{t-1}, X_{t-2}, ..., X_{t-p}$: Valores anteriores da série temporal;
+
+- $θ_1, θ_2, ..., θ_q$: Coeficientes dos termos de média móvel;
+
+- $ε_{t-1}, ε_{t-2}, ..., ε_{t-q}$: Erros passados da série temporal.
+
+**6. Modelo ARCH (Autoregressive Conditional Heteroskedasticity)**: O modelo ARCH é um modelo pioneiro que assume que a volatilidade condicional é uma função dos resíduos autorregressivos. Em outras palavras, ele captura a dependência da variância condicional em relação aos erros passados. No modelo ARCH, a variância condicional é modelada como uma combinação linear dos quadrados dos resíduos anteriores. Isso significa que a volatilidade condicional é determinada pela magnitude dos resíduos observados anteriormente (Engle, 1982).
+
+Fórmula do modelo ARCH(p):
+
+\begin{equation}
+r_t = μ + ε_t * √(σ_t^2)
+\end{equation}
+\begin{equation}
+σ_t^2 = ω + α_1 * ε_{t-1}^2 + α_2 * ε_{t-2}^2 + ... + α_p * ε_{t-p}^2
+\end{equation}
+
+- $r_t$: Retorno no tempo t;
+
+- $μ$: Média condicional dos retornos;
+
+- $ε_t$: Erro aleatório no tempo t;
+
+- $σ_t^2$: Variância condicional no tempo t;
+
+- $ω$: Parâmetro de interceptação, representa a componente constante da variância condicional;
+
+- $α_1, α_2, ..., α_p$: Parâmetros que medem a contribuição dos quadrados dos erros passados para a variância condicional;
+
+- $ε_{t-1}^2, ε_{t-2}^2, ..., ε_{t-p}^2$: Quadrados dos erros nos tempos t-1, t-2, ..., t-p.
+
+**7. Modelo GARCH (Generalized Autoregressive Conditional Heteroskedasticity)**: O modelo GARCH é uma extensão do modelo ARCH que capturar melhor a persistência e a memória de longo prazo na volatilidade. A principal ideia por trás do modelo GARCH é reconhecer que a volatilidade dos retornos financeiros não é constante ao longo do tempo e que essa variação pode ser influenciada por informações passadas. Ele assume que a volatilidade condicional é uma função das informações passadas sobre os retornos e da própria volatilidade condicional passada. (Bollerslev, 1986).
+
+Fórmula do modelo GARCH(p,q):
+
+\begin{equation}
+r_t = μ + ε_t * √(σ_t^2)
+\end{equation}
+\begin{equation}
+σ_t^2 = ω + α_1 * ε_{t-1}^2 + α_2 * ε_{t-2}^2 + ... + α_p * ε_{t-p}^2 + β_1 * σ_{t-1}^2 + β_2 * σ_{t-2}^2 + ... + β_q * σ_{t-q}^2
+\end{equation}
+
+Os termos são os mesmos que os do modelo ARCH, com exceção a:
+
+- $β_1, β_2, ..., β_q$: Parâmetros que medem a contribuição das volatilidades condicionais passadas para a variância condicional.
+- $σ_{t-1}^2, σ_{t-2}^2, ..., σ_{t-q}^2$: Volatilidades condicionais nos tempos t-1, t-2, ..., t-q.
+
+**8. Modelo EGARCH (Exponential Generalized Autoregressive Conditional Heteroskedasticity)**:  O modelo EGARCH é uma extensão do modelo GARCH que permite capturar assimetria na volatilidade condicional. Ele pode tratar de forma diferente o impacto de choques positivos e negativos na volatilidade. (Nelson, 1991)
+
+Fórmula do modelo EGARCH(p,q):
+
+\begin{equation}
+r_t = μ + ε_t * √(σ_t^2)
+\end{equation}
+\begin{equation}
+log(σ_t^2) = ω + α_1 * |ε_{t-1}| + α_2 * (ε_{t-1}/σ_{t-1}) + ... + α_p * (ε_{t-p}/σ_{t-p}) + β_1 * log(σ_{t-1}^2) + β_2 * log(σ_{t-2}^2) + ... + β_q * log(σ_{t-q}^2)
+\end{equation}
+
+
+**9. Autocorrelação:** A autocorrelação mede a correlação de uma série temporal consigo mesma em diferentes defasagens. É comumente analisada usando a função de autocorrelação (ACF) e a função de autocorrelação parcial (PACF).
+
+**10. AIC (Akaike Information Criterion), BIC (Bayesian Information Criterion), Shibata e  Hannan-Quinn**: O AIC, BIC, Shibata e Hannan-Quinn são critérios usados para selecionar o modelo mais adequado com base na adequação aos dados e na complexidade do modelo. O AIC leva em consideração a função de verossimilhança e o número de parâmetros, BIC penaliza modelos mais complexos, Shibata tende a favorecer modelos mais simples e Hannan-Quinn é parecido com o Shibata, mas penaliza menos a complexidade do modelo para grandes amostras.
+
+**11. Função de verossimilhança:** A função de verossimilhança é uma medida estatística utilizada para estimar os parâmetros de um modelo estatístico. Ela expressa a probabilidade de observar os dados considerando um determinado conjunto de parâmetros.
+
+**12. Distribuição Normal (norm)**: A distribuição normal, também conhecida como distribuição de Gauss ou distribuição em forma de sino, é uma das distribuições mais utilizadas na estatística. Ela é caracterizada por sua forma simétrica em torno da média e é completamente definida pelos seus dois parâmetros: a média ($μ$) e o desvio padrão ($σ$). A função de densidade de probabilidade (PDF) da distribuição normal é uma curva suave e contínua. Ela é frequentemente utilizada para modelar fenômenos naturais e muitos eventos em diversas áreas da ciência.
+
+**13. Distribuição Skew Normal (snorm):** A distribuição Skew Normal é uma distribuição de probabilidade contínua que apresenta assimetria (skew) em relação à distribuição normal. Ela é caracterizada pela presença de uma cauda assimétrica e pode modelar dados que não seguem uma distribuição normal simétrica.
+
+**14. Distribuição Standardized Student's T (std):** A distribuição standardizada da Student's t é frequentemente utilizada para modelar a volatilidade condicional em modelos GARCH. Ela é caracterizada por sua forma de sino, assimétrica e com caudas mais pesadas em relação à distribuição normal. 
+
+**15. Distribuição Skew Standardized Student's t (sstd):** A distribuição skew standardized Student's t é uma extensão da distribuição std que incorpora assimetria na volatilidade condicional.
+
+**16. Teste de Ljung-Box:** O teste de Ljung-Box é utilizado para verificar se uma série temporal exibe autocorrelação estatisticamente significativa em várias defasagens. Ele testa a hipótese nula de independência dos resíduos (Ljung & Box, 1978).
+
+**17. Teste de Shapiro-Wilk:** O teste de Shapiro-Wilk é um teste de normalidade utilizado para verificar se uma amostra de dados segue uma distribuição normal. Ele testa a hipótese nula de normalidade dos dados (Shapiro & Wilk, 1965).
+
+**18. Teste de Anderson-Darling:** O teste de Anderson-Darling é um teste de hipótese utilizado para verificar se uma amostra de dados segue uma distribuição específica, como a distribuição normal. Ele testa a hipótese nula de que os dados são provenientes da distribuição especificada (Anderson & Darling, 1954).
+
+**19. Teste de Kolmogorov-Smirnov:** O teste de Kolmogorov-Smirnov é um teste não paramétrico usado para verificar se uma amostra de dados segue uma distribuição específica. Ele compara a função de distribuição acumulada empírica com a função de distribuição acumulada teórica. Ajuda a identificar a normalidade (Massey, 1951).
+
+**20. VaR (Value at Risk):** O VaR é uma medida estatística amplamente utilizada para avaliar o risco financeiro. Ele estima a perda máxima esperada de um investimento ou carteira em um determinado intervalo de confiança durante um período de tempo específico.
+
+**21. ES (Expected Shortfall):** O ES é uma abordagem que se baseia na medida de risco financeiro que leva em consideração a perda média além do VaR (Value at Risk). O ES é também conhecido como Conditional VaR (CVaR) e é uma medida complementar ao VaR, fornecendo informações adicionais sobre o tamanho médio das perdas em cenários de risco extremo. Enquanto o VaR fornece uma estimativa da perda máxima em um determinado nível de confiança, o ES vai além e mede a média das perdas além do VaR, condicionada à ocorrência do VaR.
+
+**22. Teste de cobertura incondicional de Kupiec:** O teste de cobertura incondicional de Kupiec é utilizado para avaliar a calibração de um modelo de Value-at-Risk (VaR). Ele verifica se a proporção de violações observadas do VaR está de acordo com a taxa de violações esperada. A hipótese nula é que taxa de violações observadas do VaR é igual à taxa de violações esperada sob o modelo (Kupiec, 1995).
+
+**23. Teste de cobertura condicional de Christoffersen:** O teste de cobertura condicional de Christoffersen é um teste mais avançado que avalia a calibração do VaR em diferentes cenários de mercado, levando em consideração a dependência temporal e a volatilidade condicional. A hipótese nula é que o modelo de VaR é bem calibrado em diferentes cenários de mercado (Christoffersen, 1998).
+
+**24. Teste Dynamic Quantile de Engle e Manganelli:** O teste Dynamic Quantile de Engle e Manganelli é um teste de diagnóstico para verificar a calibração de modelos de previsão quantílica, como o VaR e o Expected Shortfall (ES), em diferentes quantis. A hipótese nula é que o modelo de previsão quantílica é bem calibrado em diferentes quantis (Engle & Manganelli, 2004).
+
+**25. Teste de déficit esperado de McNeil e Frey:** O teste de déficit esperado de McNeil e Frey é utilizado para verificar se um modelo de risco fornece estimativas precisas do déficit esperado. Ele compara a média das perdas reais com a média das perdas esperadas. (McNeil & Frey, 2000).
+
+
+Visão Geral {data-icon="fa-signal" data-navmenu="Análise Exploratória"}
+===
+
+Inputs {.sidebar}
+---
+```{r}
+
+dateRangeInput("ref_date", label = "Data - dados a partir de 01/01/2018", format = "dd/mm/yyyy", start = data_ini, end= data_fim)
+    
+```
+
+
+Column{}
+---
+### Preço Ajustado
+```{r}
+output$Preco<- renderPlotly({
+  g = ggplot(data=UGPA %>%
+               filter(ref_date >= input$ref_date[1], ref_date <= input$ref_date[2]),
+             aes(x = ref_date, y = price_adjusted)) + 
+    geom_line(color = "#49459f")+ylab("Preço Ajustado")+xlab("Data")+theme_minimal()
+ 
+    ggplotly(g,height = 200)
+
+})
+
+observeEvent(input$buttonPA, {
+  showModal(modalDialog(
+    title = "Preço Ajustado",
+    "O gráfico mostra a ação da UGPA3 cujo preço atingiu seu pico em 2018, caiu em 2021 e agora está em ascensão novamente em 2023. Isso indica uma trajetória de valorização inicial, seguida por uma queda e, mais recentemente, por uma recuperação. A volatilidade dos preços reflete a natureza dinâmica do mercado de ações."
+  ))
+})
+tags$style(type="text/css", "#buttonPA { width: 100px; height: 30px; }")
+actionButton("buttonPA", "Comentário")
+plotlyOutput("Preco")
+
+```
+
+### Retorno Ajustado
+```{r}
+output$Retorno<-renderPlotly({
+  g = ggplot(data=UGPA %>%
+               filter(ref_date >= input$ref_date[1], ref_date <= input$ref_date[2]),
+             aes(x = ref_date, y = ret_adjusted_prices)) + 
+    geom_line(color = "#008000")+ylab("Retorno Ajustado")+xlab("Data")+theme_minimal()
+ 
+    ggplotly(g, height = 200)
+
+})
+
+observeEvent(input$buttonRA, {
+  showModal(modalDialog(
+    title = "Retorno Ajustado",
+    "O gráfico do retorno ajustado da ação UGPA3 mostra um padrão estacionário com média zero, indicando que, em média, não há um viés de alta ou baixa nos retornos. No entanto, é observada uma maior variação dos retornos em determinados pontos, especialmente em 2020, o que pode ser atribuído a eventos ou condições específicas que afetaram o mercado financeiro. Essa maior volatilidade em certos períodos pode representar momentos de maior risco ou incerteza para os investidores."
+  ))
+})
+tags$style(type="text/css", "#buttonRA { width: 100px; height: 30px; }")
+actionButton("buttonRA", "Comentário")
+plotlyOutput("Retorno")
+
+```
+
+
+Column {}
+---
+
+### Volume
+```{r}
+output$Volume<-renderPlotly({
+  g = ggplot(data=UGPA %>%
+               filter(ref_date >= input$ref_date[1], ref_date <= input$ref_date[2]),
+             aes(x = ref_date, y = volume)) + 
+    geom_line(color = "#cd7f32")+ylab("Volume")+xlab("Data")+theme_minimal()
+ 
+    ggplotly(g, height = 200)
+
+})
+
+observeEvent(input$buttonVL, {
+  showModal(modalDialog(
+    title = "Volume",
+    "O gráfico do volume da ação UGPA3 mostra os picos de atividade de negociação ao longo do tempo, com o maior pico em 2019 e um pico mais recente em maio de 2023. O volume representa a quantidade de ações sendo compradas e vendidas e reflete o interesse e a participação dos investidores nessa ação."
+  ))
+})
+tags$style(type="text/css", "#buttonVL { width: 100px; height: 30px; }")
+actionButton("buttonVL", "Comentário")
+plotlyOutput("Volume")
+
+```
+
+### Retorno Ajustado²
+
+```{r}
+output$Quadrado<-renderPlotly({
+  g = ggplot(data=UGPA %>%
+               filter(ref_date >= input$ref_date[1], ref_date <= input$ref_date[2]),
+             aes(x = ref_date, y = ret_adjusted_prices^2)) + 
+    geom_line(color = "#696969")+ylab("Retorno Ajustado²")+xlab("Data")+theme_minimal()
+ 
+    ggplotly(g, height = 200)
+
+})
+
+observeEvent(input$buttonR2, {
+  showModal(modalDialog(
+    title = "Retorno Ajustado²",
+    "O gráfico do retorno ajustado ao quadrado da ação UGPA3 demonstra o comportamento da volatilidade dos retornos ao longo do tempo. O maior pico ocorreu em maio de 2020, indicando um período de alta volatilidade. Essa medida é significativa para avaliar o risco e a variação dos retornos da ação."
+  ))
+})
+tags$style(type="text/css", "#buttonR2 { width: 100px; height: 30px; }")
+actionButton("buttonR2", "Comentário")
+plotlyOutput("Quadrado")
+
+```
+
+Gráficos Descritivos {data-icon="fa-clipboard" data-navmenu="Análise Exploratória"}
+===
+
+Inputs {.sidebar}
+---
+```{r}
+
+dateRangeInput("ref_date1", label = "Data - dados a partir de 01/01/2018", format = "dd/mm/yyyy", start = data_ini, end= data_fim)
+    
+```
+
+Column {}
+---
+### ACF do Retorno Ajustado
+```{r}
+
+output$AcfR<-renderPlotly({
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date1[1], ref_date <= input$ref_date1[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+
+list.acf <- acf(data_filtered, lag.max = 40, type = "correlation", plot = FALSE)
+  N <- as.numeric(list.acf$n.used)
+  df1 <- data.frame(lag = list.acf$lag, acf = list.acf$acf)
+  df1$lag.acf <- dplyr::lag(df1$acf, default = 0)
+  df1$lag.acf[2] <- 0
+  df1$lag.acf.cumsum <- cumsum((df1$lag.acf)^2)
+  df1$acfstd <- sqrt(1/N * (1 + 2 * df1$lag.acf.cumsum))
+  df1$acfstd[1] <- 0
+  df1 <- select(df1, lag, acf, acfstd)
+  
+    
+ plot.acf <- ggplot(data = df1, aes( x = lag, y = acf)) +
+    geom_col(fill = "#4373B6", width = 0.7) +
+    geom_hline(yintercept = qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    geom_hline(yintercept = - qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    scale_x_continuous(breaks = seq(0,max(df1$lag),6)) +
+    scale_y_continuous(name = element_blank(), 
+                       limits = c(min(df1$acf),1)) +
+    ggtitle("ACF") +
+    theme_bw()
+ ggplotly(plot.acf,height = 190)
+})
+
+observeEvent(input$buttonAR, {
+  showModal(modalDialog(
+    title = "ACF do Retorno Ajustado",
+    "O gráfico de Autocorrelação (ACF) do retorno ajustado da ação UGPA3 revela algumas autocorrelações no início do gráfico, indicando uma possível dependência temporal nos retornos. Essas autocorrelações podem ser exploradas para análises e previsões futuras dos retornos da ação."
+  ))
+})
+tags$style(type="text/css", "#buttonAR { width: 100px; height: 30px; }")
+actionButton("buttonAR", "Comentário")
+plotlyOutput("AcfR")
+```
+
+### ACF do Retorno Ajustado²
+```{r}
+
+output$AcfQ<-renderPlotly({
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date1[1], ref_date <= input$ref_date1[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+
+list.acf <- acf(data_filtered^2, lag.max = 40, type = "correlation", plot = FALSE)
+  N <- as.numeric(list.acf$n.used)
+  df1 <- data.frame(lag = list.acf$lag, acf = list.acf$acf)
+  df1$lag.acf <- dplyr::lag(df1$acf, default = 0)
+  df1$lag.acf[2] <- 0
+  df1$lag.acf.cumsum <- cumsum((df1$lag.acf)^2)
+  df1$acfstd <- sqrt(1/N * (1 + 2 * df1$lag.acf.cumsum))
+  df1$acfstd[1] <- 0
+  df1 <- select(df1, lag, acf, acfstd)
+  
+    
+ plot.acf <- ggplot(data = df1, aes( x = lag, y = acf)) +
+    geom_col(fill = "#4373B6", width = 0.7) +
+    geom_hline(yintercept = qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    geom_hline(yintercept = - qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    scale_x_continuous(breaks = seq(0,max(df1$lag),6)) +
+    scale_y_continuous(name = element_blank(), 
+                       limits = c(min(df1$acf),1)) +
+    ggtitle("ACF") +
+    theme_bw()
+ ggplotly(plot.acf,height = 190)
+})
+observeEvent(input$buttonAQ, {
+  showModal(modalDialog(
+    title = "ACF do Retorno Ajustado²",
+    "O gráfico de Autocorrelação (ACF) do retorno ao quadrado da ação UGPA3 revela uma alta autocorrelação nos primeiros lags, seguida por um rápido declínio. Isso indica uma dependência de curto prazo nos movimentos de volatilidade, mas uma diminuição da influência passada à medida que o tempo avança."
+  ))
+})
+tags$style(type="text/css", "#buttonAQ { width: 100px; height: 30px; }")
+actionButton("buttonAQ", "Comentário")
+plotlyOutput("AcfQ")
+```
+
+Column {}
+---
+
+### Histograma do Retorno Ajustado
+```{r}
+output$Hist<-renderPlotly({
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date1[1], ref_date <= input$ref_date1[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  # Sequência de pontos no eixo x
+  x_seq <- seq(min(data_filtered$ret_adjusted_prices), max(data_filtered$ret_adjusted_prices), length.out = 100)
+  
+  # Densidade
+  densidade <- density(data_filtered$ret_adjusted_prices)
+  
+  p <- plot_ly(height = 190) %>%
+    add_histogram(data = data_filtered, x = ~ret_adjusted_prices, histnorm = "probability density",
+                  marker = list(color = "#4373B6"), name = "Retorno", opacity = 0.7) %>%
+    add_lines(x = densidade$x, y = densidade$y, line = list(color = "red"), name = "Densidade") %>%
+    add_lines(x = x_seq, y = dnorm(x_seq, mean = mean(data_filtered$ret_adjusted_prices, na.rm = TRUE), sd = sd(data_filtered$ret_adjusted_prices, na.rm = TRUE)),
+              line = list(color = "black"), name = "Distribuição Normal") %>%
+    layout(xaxis = list(title = "Retorno Ajustado"), yaxis = list(title = "Densidade"))
+  p
+
+})
+observeEvent(input$buttonHist, {
+  showModal(modalDialog(
+    title = "Histograma do Retorno Ajustado",
+    "O histograma da distribuição do retorno ajustado da ação UGPA3 indica que a distribuição dos retornos apresenta diferenças em relação ao padrão da distribuição normal. Essa observação sugere a presença de assimetria ou curtose nos retornos, o que pode ter implicações relevantes na modelagem e gestão de risco."
+  ))
+})
+tags$style(type="text/css", "#buttonHist { width: 100px; height: 30px; }")
+actionButton("buttonHist", "Comentário")
+plotlyOutput("Hist")
+
+```
+
+
+
+### Testes de Hipótese
+```{r}
+
+output$TH1<-renderUI({
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date1[1], ref_date <= input$ref_date1[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  dados_numericos <- data_filtered$ret_adjusted_prices
+  
+  Teste = Box.test(dados_numericos,type = "Ljung-Box", lag = 10)
+  pvalor = Teste[["p.value"]]
+  pvalor = ifelse(pvalor<0.0001, "< 0,0001",round(pvalor,4))
+  
+  Teste1 = Box.test(dados_numericos^2,type = "Ljung-Box", lag = 10)
+  pvalor1 = Teste1[["p.value"]]
+  pvalor1 = ifelse(pvalor1<0.0001, "< 0,0001",round(pvalor1,4))
+  
+  Teste2 = shapiro.test(dados_numericos)
+  pvalor2 = Teste2[["p.value"]]
+  pvalor2 = ifelse(pvalor2<0.0001, "< 0,0001",round(pvalor2,4))
+  
+  Teste3 = ad.test(dados_numericos)
+  pvalor3 = Teste3[["p.value"]]
+  pvalor3 = ifelse(pvalor3<0.0001, "< 0,0001",round(pvalor3,4))
+  
+  Teste4 = ks.test(dados_numericos, "pnorm", mean(dados_numericos), sd(dados_numericos))
+  pvalor4 = Teste4[["p.value"]]
+  pvalor4 = ifelse(pvalor4<0.0001, "< 0,0001",round(pvalor4,4))
+  
+  dados <- data.frame(
+    `Teste` = c("Ljung Box","Ljung Box","Shapiro-Wilk","Anderson-Darling","Kolmogorov-Smirnov"),
+    `Variavel` =c("Retorno Ajustado","Retorno Ajustado²","Retorno Ajustado","Retorno Ajustado","Retorno Ajustado"),
+    `Estatística do teste` = c(round(Teste[["statistic"]][["X-squared"]],4),round(Teste1[["statistic"]][["X-squared"]],4),round(Teste2[["statistic"]][["W"]],4),round(Teste3[["statistic"]][["A"]],4),round(Teste4[["statistic"]][["D"]],4)),
+    `p-valor` = c(pvalor,pvalor1,pvalor2,pvalor3,pvalor4)
+  )
+  
+  colnames(dados) <- c("Teste","Variável", "Estatística do teste", "p-valor")
+# Criação da tabela com formatação correta
+  tbl <- htmlTable(dados, rnames = FALSE, 
+                   align = "ccc",
+                   css.cell = "padding-left:10px;padding-right:10px",
+                   css.cell_1 = "font-weight:bold;",
+                   css.header = "background-color:#f5f5f5;font-weight:bold;")
+  
+  # Centralização da tabela
+  tbl_html <- as.character(tbl)
+  tbl_html <- gsub("<table", '<table style="margin:auto;height:60%;"', tbl_html)
+  
+  # Renderização da tabela no Shiny
+  HTML(tbl_html)
+})
+observeEvent(input$buttonTH1, {
+  showModal(modalDialog(
+    title = "Testes de Hipótese",
+    "Os resultados dos testes estatísticos aplicados aos retornos ajustados e ao retorno ajustado ao quadrado da ação UGPA3 indicam que há evidências significativas contra a independência temporal e a aderência a uma distribuição específica. Esses resultados destacam a importância de considerar as características únicas dos retornos ao realizar análises e tomar decisões de investimento."
+  ))
+})
+tags$style(type="text/css", "#buttonTH1 { width: 100px; height: 30px; }")
+actionButton("buttonTH1", "Comentário")
+
+uiOutput("TH1")
+```
+
+
+Diagnóstico {data-icon="fa-poll" data-navmenu="Modelagem"}
+===
+
+Inputs {.sidebar}
+---
+```{r}
+
+dateRangeInput("ref_date3", label = "Data - dados a partir de 01/01/2018", format = "dd/mm/yyyy", start = data_ini, end= data_fim)
+
+selectInput("modelo", "Modelo:", choices = c("sGARCH", "eGARCH"))
+selectInput("Distribuição", "Distribuição:", choices = c("norm", "std","snorm","sstd"))
+radioButtons("radio", label = "Incluir média?",
+             choices = list("Sim"=TRUE,"Não"=FALSE), 
+             selected = FALSE)
+      sliderInput("p", "Valor de p ARMA:", min = 0, max = 4, value = 0)
+      sliderInput("q", "Valor de q ARMA:", min = 0, max = 4, value = 0)
+      sliderInput("pg", "Valor de p GARCH:", min = 1, max = 4, value = 1)
+      sliderInput("qg", "Valor de q GARCH:", min = 1, max = 4, value = 1)
+```
+
+
+Column {.tabset}
+---
+
+### ACF dos Resíduos
+
+```{r}
+output$fit_output1 <- renderPlotly({
+  
+  req(input$modelo, input$p, input$q, input$pg, input$qg, input$Distribuição, input$radio, input$ref_date3)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date3[1], ref_date <= input$ref_date3[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p, input$q), include.mean = include.mean), variance.model = list(model = input$modelo, garchOrder = c(input$pg,input$qg)),distribution = input$Distribuição)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  e_hat = fit1@fit$residuals/fit1@fit$sigma
+  
+  list.acf <- acf(e_hat, lag.max = 40, type = "correlation", plot = FALSE)
+  N <- as.numeric(list.acf$n.used)
+  df1 <- data.frame(lag = list.acf$lag, acf = list.acf$acf)
+  df1$lag.acf <- dplyr::lag(df1$acf, default = 0)
+  df1$lag.acf[2] <- 0
+  df1$lag.acf.cumsum <- cumsum((df1$lag.acf)^2)
+  df1$acfstd <- sqrt(1/N * (1 + 2 * df1$lag.acf.cumsum))
+  df1$acfstd[1] <- 0
+  df1 <- select(df1, lag, acf, acfstd)
+  
+    
+ plot.acf <- ggplot(data = df1, aes( x = lag, y = acf)) +
+    geom_col(fill = "#4373B6", width = 0.7) +
+    geom_hline(yintercept = qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    geom_hline(yintercept = - qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    scale_x_continuous(breaks = seq(0,max(df1$lag),6)) +
+    scale_y_continuous(name = element_blank(), 
+                       limits = c(min(df1$acf),1)) +
+    ggtitle("ACF") +
+    theme_bw()
+ ggplotly(plot.acf,height = 400)
+  
+})
+observeEvent(input$buttonA1, {
+  showModal(modalDialog(
+    title = "ACF dos Resíduos",
+    "O gráfico de ACF dos resíduos após a modelagem dos retornos ajustados da ação UGPA3 não revela autocorrelação significativa nos primeiros lags. Isso indica que os modelos testados foram capazes de capturar adequadamente a estrutura dos dados e remover a dependência temporal dos retornos ajustados."
+  ))
+})
+tags$style(type="text/css", "#buttonA1 { width: 100px; height: 30px; }")
+actionButton("buttonA1", "Comentário")
+plotlyOutput("fit_output1")
+```
+
+### ACF dos Resíduos²
+
+```{r}
+output$fit_output2 <- renderPlotly({
+  
+  req(input$modelo, input$p, input$q, input$pg, input$qg, input$Distribuição, input$radio, input$ref_date3)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date3[1], ref_date <= input$ref_date3[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p, input$q), include.mean = include.mean), variance.model = list(model = input$modelo, garchOrder = c(input$pg,input$qg)),distribution = input$Distribuição)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  e_hat = fit1@fit$residuals/fit1@fit$sigma
+  
+  list.acf <- acf(e_hat^2, lag.max = 40, type = "correlation", plot = FALSE)
+  N <- as.numeric(list.acf$n.used)
+  df1 <- data.frame(lag = list.acf$lag, acf = list.acf$acf)
+  df1$lag.acf <- dplyr::lag(df1$acf, default = 0)
+  df1$lag.acf[2] <- 0
+  df1$lag.acf.cumsum <- cumsum((df1$lag.acf)^2)
+  df1$acfstd <- sqrt(1/N * (1 + 2 * df1$lag.acf.cumsum))
+  df1$acfstd[1] <- 0
+  df1 <- select(df1, lag, acf, acfstd)
+  
+    
+ plot.acf <- ggplot(data = df1, aes( x = lag, y = acf)) +
+    geom_col(fill = "#4373B6", width = 0.7) +
+    geom_hline(yintercept = qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    geom_hline(yintercept = - qnorm((1+0.95)/2)/sqrt(N), 
+               colour = "sandybrown",
+               linetype = "dashed") + 
+    scale_x_continuous(breaks = seq(0,max(df1$lag),6)) +
+    scale_y_continuous(name = element_blank(), 
+                       limits = c(min(df1$acf),1)) +
+    ggtitle("ACF") +
+    theme_bw()
+ ggplotly(plot.acf,height = 400)
+
+})
+
+observeEvent(input$buttonA2, {
+  showModal(modalDialog(
+    title = "ACF dos Resíduos²",
+    "O gráfico de ACF dos resíduos ao quadrado, após a modelagem dos retornos ajustados da ação UGPA3, não revela autocorrelação significativa nos primeiros lags, independentemente do modelo testado. Isso indica que os modelos foram capazes de capturar efetivamente a estrutura dos dados e remover a dependência temporal dos resíduos ao quadrado."
+  ))
+})
+tags$style(type="text/css", "#buttonA2 { width: 100px; height: 30px; }")
+actionButton("buttonA2", "Comentário")
+plotlyOutput("fit_output2")
+```
+
+### QQ plot
+
+```{r}
+output$fit_output3 <- renderPlot({
+  
+  req(input$modelo, input$p, input$q, input$pg, input$qg, input$Distribuição, input$radio, input$ref_date3)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date3[1], ref_date <= input$ref_date3[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p, input$q), include.mean = include.mean), variance.model = list(model = input$modelo, garchOrder = c(input$pg,input$qg)),distribution = input$Distribuição)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  # Cria o QQ plot
+  plot(fit1,which=9)
+  
+}, height = 400)
+
+observeEvent(input$button3, {
+  showModal(modalDialog(
+    title = "QQ Plot",
+    "O gráfico QQ Plot dos resíduos revela que as distribuições norm e snorm possuem caudas mais pesadas do que o esperado, enquanto as distribuições std e sstd se ajustam melhor aos dados dos resíduos da ação UGPA3. Isso indica que as distribuições std e sstd podem ser mais adequadas para modelar a volatilidade condicional e a estrutura dos resíduos."
+  ))
+})
+tags$style(type="text/css", "#button3 { width: 100px; height: 30px; }")
+actionButton("button3", "Comentário")
+plotOutput("fit_output3")
+```
+
+### Testes de Hipótese
+
+```{r}
+
+output$TH2<- renderUI({
+  
+  req(input$modelo, input$p, input$q, input$pg, input$qg, input$Distribuição, input$radio, input$ref_date3)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date3[1], ref_date <= input$ref_date3[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p, input$q), include.mean = include.mean), variance.model = list(model = input$modelo, garchOrder = c(input$pg,input$qg)),distribution = input$Distribuição)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  dados_numericos <- data_filtered$ret_adjusted_prices
+  
+  e_hat = fit1@fit$residuals/fit1@fit$sigma
+  
+  Teste = Box.test(e_hat,type = "Ljung-Box", lag = 10)
+  pvalor = Teste[["p.value"]]
+  pvalor = ifelse(pvalor<0.0001, "< 0,0001",round(pvalor,4))
+  
+  Teste1 = Box.test(e_hat^2,type = "Ljung-Box", lag = 10)
+  pvalor1 = Teste1[["p.value"]]
+  pvalor1 = ifelse(pvalor1<0.0001, "< 0,0001",round(pvalor1,4))
+  
+  Teste2 = shapiro.test(e_hat)
+  pvalor2 = Teste2[["p.value"]]
+  pvalor2 = ifelse(pvalor2<0.0001, "< 0,0001",round(pvalor2,4))
+  
+  Teste3 = ad.test(e_hat)
+  pvalor3 = Teste3[["p.value"]]
+  pvalor3 = ifelse(pvalor3<0.0001, "< 0,0001",round(pvalor3,4))
+  
+  Teste4 = ks.test(e_hat, "pnorm", mean(dados_numericos), sd(dados_numericos))
+  pvalor4 = Teste4[["p.value"]]
+  pvalor4 = ifelse(pvalor4<0.0001, "< 0,0001",round(pvalor4,4))
+  
+  dados <- data.frame(
+    `Teste` = c("Ljung Box","Ljung Box","Shapiro-Wilk","Anderson-Darling","Kolmogorov-Smirnov"),
+    `Variavel` =c("Resíduo","Resíduo²","Resíduo","Resíduo","Resíduo"),
+    `Estatística do teste` = c(round(Teste[["statistic"]][["X-squared"]],4),round(Teste1[["statistic"]][["X-squared"]],4),round(Teste2[["statistic"]][["W"]],4),round(Teste3[["statistic"]][["A"]],4),round(Teste4[["statistic"]][["D"]],4)),
+    `p-valor` = c(pvalor,pvalor1,pvalor2,pvalor3,pvalor4)
+  )
+  
+  colnames(dados) <- c("Teste","Variável", "Estatística do teste", "p-valor")
+# Criação da tabela com formatação correta
+  tbl <- htmlTable(dados, rnames = FALSE, 
+                   align = "ccc",
+                   css.cell = "padding-left:10px;padding-right:10px",
+                   css.cell_1 = "font-weight:bold;",
+                   css.header = "background-color:#f5f5f5;font-weight:bold;")
+  
+  # Centralização da tabela
+  tbl_html <- as.character(tbl)
+  tbl_html <- gsub("<table", '<table style="margin:auto;height:60%;"', tbl_html)
+  
+  # Renderização da tabela no Shiny
+  HTML(tbl_html)
+})
+
+observeEvent(input$button4, {
+  showModal(modalDialog(
+    title = "Testes de Hipótese",
+    "Os testes de hipótese aplicados aos resíduos dos modelos testados indicam que eles são independentes, sem autocorrelação significativa. No entanto, os resíduos não seguem uma distribuição normal."
+  ))
+})
+tags$style(type="text/css", "#button4 { width: 100px; height: 30px; }")
+actionButton("button4", "Comentário")
+uiOutput("TH2")
+
+```
+
+Column {}
+---
+### Parâmetros e Informações do Modelo
+```{r}
+output$fit_output <- renderPrint({
+  
+  req(input$modelo, input$p, input$q, input$pg, input$qg,input$Distribuição, input$radio, input$ref_date3)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date3[1], ref_date <= input$ref_date3[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p, input$q), include.mean = include.mean), variance.model = list(model = input$modelo, garchOrder = c(input$pg,input$qg)),distribution = input$Distribuição)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  fit1
+})
+observeEvent(input$button2, {
+  showModal(modalDialog(
+    title = "Parâmetros e Informações do Modelo",
+    "A análise dos modelos sGARCH e eGARCH revela que no modelo sGARCH os parâmetros p ou q maiores que 1 não são significativos, enquanto no modelo eGARCH eles são significativos. A inclusão de parâmetros ARMA pode não ser relevante, a menos que p e q sejam diferentes de zero. Os testes de Ljung-Box não mostraram autocorrelação nos resíduos padronizados, e os valores de AIC e BIC são próximos para todos os modelos. Esses resultados ajudam a informar a escolha do modelo mais adequado para a modelagem dos retornos ajustados da ação UGPA3."
+  ))
+})
+tags$style(type="text/css", "#button2 { width: 100px; height: 30px; }")
+actionButton("button2", "Comentário")
+div(style = "height: 190px;", verbatimTextOutput("fit_output"))
+```
+
+### Resíduos do Modelo
+
+```{r}
+
+output$resid_plot <- renderPlotly({
+  
+  req(input$modelo, input$p, input$q, input$pg, input$qg, input$Distribuição, input$radio, input$ref_date3)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date3[1], ref_date <= input$ref_date3[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p, input$q), include.mean = include.mean), variance.model = list(model = input$modelo, garchOrder = c(input$pg,input$qg)),distribution = input$Distribuição)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  # Cria um dataframe para os resíduos
+  residuals <- fit1@fit$residuals / fit1@fit$sigma
+  
+  # Create a data frame for the residuals
+  residuals_df <- data.frame(residuals = residuals)
+  
+  # Cria o gráfico dos resíduos
+  residuals_plot <- ggplot(residuals_df, aes(x = 1:length(residuals), y = residuals)) +
+    geom_line(color="sandybrown") +
+    xlab("Observação") +
+    ylab("Resíduo") +
+    theme_minimal()
+  
+  
+  ggplotly(residuals_plot, height = 190)
+
+})
+
+observeEvent(input$button1, {
+  showModal(modalDialog(
+    title = "Resíduos do Modelo",
+    "O gráfico dos resíduos dos modelos mostra que eles são estacionários, com média aparentemente zero. Alguns picos são observados em determinadas observações ao longo do tempo, indicando a presença de eventos ou períodos de volatilidade atípica. No geral, os modelos conseguem capturar as variações não sistemáticas dos retornos ajustados da ação UGPA3. Essas características são relevantes para a interpretação dos resultados e análise de eventos específicos."
+  ))
+})
+tags$style(type="text/css", "#button1 { width: 100px; height: 30px; }")
+actionButton("button1", "Comentário")
+plotlyOutput("resid_plot")
+
+```
+
+
+Previsão {data-icon="fa-arrow-right" data-navmenu="Modelagem"}
+===
+
+Inputs {.sidebar}
+---
+```{r}
+
+dateRangeInput("ref_date4", label = "Data - dados a partir de 01/01/2018", format = "dd/mm/yyyy", start = data_ini, end= data_fim)
+
+selectInput("modelo1", "Modelo:", choices = c("sGARCH", "eGARCH"))
+selectInput("Distribuição1", "Distribuição:", choices = c("norm", "std","snorm","sstd"))
+radioButtons("radio1", label = "Incluir média?",
+             choices = list("Sim"=TRUE,"Não"=FALSE), 
+             selected = FALSE)
+sliderInput("h", "Quantos passos a frente?", min = 1, max = 7, value = 2)
+      sliderInput("p1", "Valor de p ARMA:", min = 0, max = 4, value = 0)
+      sliderInput("q1", "Valor de q ARMA:", min = 0, max = 4, value = 0)
+      sliderInput("pg1", "Valor de p GARCH:", min = 1, max = 4, value = 1)
+      sliderInput("qg1", "Valor de q GARCH:", min = 1, max = 4, value = 1)
+      
+```
+
+Column {}
+---
+
+
+### Previsão da Série
+```{r}
+output$fit_output4 <- renderPlotly({
+  
+  req(input$modelo1, input$p1, input$q1, input$pg1, input$qg1, input$Distribuição1, input$radio1, input$ref_date4, input$h)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date4[1], ref_date <= input$ref_date4[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio1))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p1, input$q1), include.mean = include.mean), variance.model = list(model = input$modelo1, garchOrder = c(input$pg1,input$qg1)),distribution = input$Distribuição1)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  # Forecasting
+  fore <- ugarchforecast(fit1, n.ahead = input$h)
+  
+  # Extract the forecast data
+  forecasted_values <- fore@forecast$seriesFor[,1]
+  sigma_values <- fore@forecast$sigmaFor[,1]
+
+  forecast_data <- data.frame(
+    Date = seq(from = length(data_filtered$ret_adjusted_prices) + 1, to = length(data_filtered$ret_adjusted_prices) + input$h),
+    Value = forecasted_values,
+    Upper = forecasted_values + 2 * sigma_values,
+    Lower = forecasted_values - 2 * sigma_values,
+    Type = "Forecast"
+  )
+  
+  original_data <- data.frame(
+    Date = 1:length(data_filtered$ret_adjusted_prices),
+    Value = data_filtered$ret_adjusted_prices,
+    Upper = NA,
+    Lower = NA,
+    Type = "Original"
+  )
+
+  total_data <- rbind(original_data, forecast_data)
+
+  # Select only the last n observations
+  total_data <- total_data[(nrow(total_data) - 20):nrow(total_data),]
+
+  # Create the forecast plot with ggplot
+  forecast_plot <- ggplot(total_data, aes(x = Date)) +
+    geom_line(aes(y = Value, colour = Type), size = 1) +
+    scale_color_manual(values = c("Original" = "#4373B6", "Forecast" = "red")) +
+    labs(x = "Dados", y = "Retorno Ajustado", color = "Tipo") +
+    theme_minimal()
+
+  if(input$h > 1) {
+    forecast_plot <- forecast_plot + geom_ribbon(aes(ymin = Lower, ymax = Upper), data = total_data, alpha = 0.05)
+  }
+  
+  ggplotly(forecast_plot,height = 400)
+})
+observeEvent(input$buttonx, {
+  showModal(modalDialog(
+    title = "Previsão da Série",
+    "É possível notar no gráfico que as previsões da série, independentemente do número de passos à frente e do modelo, os valores previstos são praticamente constantes. A faixa cinza representa a banda de confiança com um nível de confiança de 95%, indicando a incerteza em torno das previsões."
+  ))
+})
+tags$style(type="text/css", "#buttonx { width: 100px; height: 30px; }")
+actionButton("buttonx", "Comentário")
+plotlyOutput("fit_output4")
+```
+
+
+
+Column{}
+---
+
+### Valor da Série e da Volatilidade "h" Passos a Frente
+```{r}
+output$fit_output5 <- renderPrint({
+  
+  req(input$modelo1, input$p1, input$q1, input$pg1, input$qg1, input$Distribuição1, input$radio1, input$ref_date4, input$h)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date4[1], ref_date <= input$ref_date4[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio1))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p1, input$q1), include.mean = include.mean), variance.model = list(model = input$modelo1, garchOrder = c(input$pg1,input$qg1)),distribution = input$Distribuição1)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  # Forecasting
+  fore <- ugarchforecast(fit1, n.ahead = input$h)
+  
+  fore
+})
+
+observeEvent(input$buttony, {
+  showModal(modalDialog(
+    title = "Valor da Série e da Volatilidade h Passos a Frente",
+    "O gráfico da saída do modelo mostra que os valores previstos da série permanecem praticamente constantes ao longo do tempo para todos os modelos, enquanto a volatilidade varia. Isso indica que os modelos capturam a estabilidade dos valores da série, mas são sensíveis às flutuações de curto prazo."
+  ))
+})
+
+tags$style(type="text/css", "#buttony { width: 100px; height: 30px; }")
+actionButton("buttony", "Comentário")
+div(style = "height: 190px;", verbatimTextOutput("fit_output5"))
+
+```
+
+
+### Medidas de Risco para "h" Passos a Frente
+```{r}
+output$Var<-renderUI({
+  
+ req(input$modelo1, input$p1, input$q1, input$pg1, input$qg1, input$Distribuição1, input$radio1, input$ref_date4, input$h)
+  
+  data_filtered <- UGPA %>% 
+    filter(ref_date >= input$ref_date4[1], ref_date <= input$ref_date4[2]) %>% 
+    select(ret_adjusted_prices) %>% 
+    na.omit()
+  
+  centrada <- data_filtered$ret_adjusted_prices - mean(data_filtered$ret_adjusted_prices)
+  
+  include.mean <- as.logical(tolower(input$radio1))
+  
+  spec <- ugarchspec(mean.model = list(armaOrder = c(input$p1, input$q1), include.mean = include.mean), variance.model = list(model = input$modelo1, garchOrder = c(input$pg1,input$qg1)),distribution = input$Distribuição1)
+  
+  fit1 <- ugarchfit(spec, centrada, solver = 'hybrid')
+  
+  dados_numericos <- data_filtered$ret_adjusted_prices
+  
+  fore <- ugarchforecast(fit1, n.ahead = 10)
+  
+  alpha <- 0.01
+  VaR01<-qdist(distribution = input$Distribuição1, alpha, mu =
+          fore@forecast[["seriesFor"]][input$h], sigma = sigma(fore)[input$h],
+        skew = coef(fit1)["skew"], shape = coef(fit1)["shape"])
+  alpha1 <- 0.05
+  VaR05<-qdist(distribution = input$Distribuição1, alpha1, mu =
+          fore@forecast[["seriesFor"]][input$h], sigma = sigma(fore)[input$h],
+        skew = coef(fit1)["skew"], shape = coef(fit1)["shape"])
+
+  
+  xf = function(x, mu_, sigma_, skew_, shape_) {
+  x*ddist(distribution = input$Distribuição1, 
+          y = x,
+          mu = mu_, 
+          sigma = sigma_, 
+          skew = skew_,
+          shape = shape_)
+}
+
+  ES01 = integrate(xf, 
+               -Inf, 
+               VaR01, 
+               mu_ = fore@forecast[["seriesFor"]][1],
+               sigma_ = sigma(fore)[1],
+               skew_ = coef(fit1)["skew"],
+               shape_ = coef(fit1)["shape"])$value/0.01
+
+
+  ES05 = integrate(xf, 
+               -Inf, 
+               VaR05, 
+               mu_ = fore@forecast[["seriesFor"]][1],
+               sigma_ = sigma(fore)[1],
+               skew_ = coef(fit1)["skew"],
+               shape_ = coef(fit1)["shape"])$value/0.05
+  
+  
+  
+  dados <- data.frame(
+    `Medida de Risco` = c("VaR","ES"),
+    `Alpha 0.01` = c(round(VaR01,5),round(ES01,5)),
+    `Alpha 0.05` = c(round(VaR05,5),round(ES05,5))
+  )
+  
+  colnames(dados) <- c("Medida de Risco","α = 0.01", "α = 0.05")
+# Criação da tabela com formatação correta
+  tbl <- htmlTable(dados, rnames = FALSE, 
+                   align = "ccc",
+                   css.cell = "padding-left:10px;padding-right:10px",
+                   css.cell_1 = "font-weight:bold;",
+                   css.header = "background-color:#f5f5f5;font-weight:bold;")
+  
+  # Centralização da tabela
+  tbl_html <- as.character(tbl)
+  tbl_html <- gsub("<table", '<table style="margin:auto;height:60%;"', tbl_html)
+  
+  # Renderização da tabela no Shiny
+  HTML(tbl_html)
+})
+
+observeEvent(input$buttonw, {
+  showModal(modalDialog(
+    title = "Medidas de Risco para h Passos a Frente",
+    "A tabela de Medidas de Risco apresenta os valores de VaR e ES para diferentes níveis de confiança. O VaR representa a perda máxima esperada em um determinado nível de confiança, enquanto o ES representa a média das perdas além do VaR. Essas medidas são importantes indicadores de risco e auxiliam na avaliação do potencial de perdas em um horizonte de tempo específico. Em geral todos os modelos possuem risco de perdas muito semelhantes."
+  ))
+})
+
+tags$style(type="text/css", "#buttonw { width: 100px; height: 30px; }")
+actionButton("buttonw", "Comentário")
+uiOutput("Var")
+```
+
+
+Escolha do Modelo {data-icon="fa-gear" data-navmenu="Conclusão"}
+===
+
+#### Escolha do Modelo
+
+Durante este estudo, realizamos uma análise detalhada de várias ações do setor de petróleo e gás listadas na B3, com foco em identificar a ação com a maior média de retorno ajustado em 2023. A ação do Grupo Ultra (UGPA3) foi selecionada com base nesta metodologia.
+
+Posteriormente, realizamos uma análise exploratória e de modelagem, utilizando modelos de volatilidade para modelar o retorno ajustado da ação selecionada. Pela análise exploratória foi possível identificar partes da série dos retornos com maior variância, o que pode indicar uma assimetria na volatilidade condicional, portanto um modelo EGARCH seria mais preferível que um sGARCH para capturar melhor as características da série. Na parte de modelagem a distribuição que melhor se adequou aos dados foi a Skew Student T, sabendo disso, após a análise diagnóstica selecionamos os modelos que mais se adequaram aos dados, podemos ver eles na Tabela 3 (todos os modelos na tabela segue distribuição Skew Student T), onde o modelo EGARCH(1,1) com distribuição Skew Student T foi o que possuiu os menores critérios de informação.
+
+```{r}
+centrada <- UGPA$ret_adjusted_prices - mean(UGPA$ret_adjusted_prices)
+  
+#sGarch(1,1) 
+  
+  spec1 <- ugarchspec(mean.model = list(armaOrder = c(0,0), include.mean = FALSE), variance.model = list(model = "sGARCH", garchOrder = c(1,1)),distribution = "sstd")
+  
+  fit1 <- ugarchfit(spec1, centrada, solver = 'hybrid')
+  
+# EGARCH(1,1) 
+  
+  spec2 <- ugarchspec(mean.model = list(armaOrder = c(0,0), include.mean = FALSE), variance.model = list(model = "eGARCH", garchOrder = c(1,1)),distribution = "sstd")
+  
+  fit2 <- ugarchfit(spec2, centrada, solver = 'hybrid')
+  
+# ARMA(1,1)-EGARCH(1,1)
+  
+  spec3 <- ugarchspec(mean.model = list(armaOrder = c(1,1), include.mean = FALSE), variance.model = list(model = "eGARCH", garchOrder = c(1,1)),distribution = "sstd")
+  
+  fit3 <- ugarchfit(spec3, centrada, solver = 'hybrid')
+  
+# ARMA(2,2)-EGARCH(1,1)  
+  
+  spec4 <- ugarchspec(mean.model = list(armaOrder = c(2,2), include.mean = FALSE), variance.model = list(model = "eGARCH", garchOrder = c(1,1)),distribution = "sstd")
+  
+  fit4 <- ugarchfit(spec4, centrada, solver = 'hybrid')
+
+
+# EGARCH(1,2)  
+  
+  spec6 <- ugarchspec(mean.model = list(armaOrder = c(0,0), include.mean = FALSE), variance.model = list(model = "eGARCH", garchOrder = c(1,2)),distribution = "sstd")
+  
+  fit6 <- ugarchfit(spec6, centrada, solver = 'hybrid')
+  
+# ARMA(1,1)-EGARCH(1,2)
+  
+  spec7 <- ugarchspec(mean.model = list(armaOrder = c(1,1), include.mean = FALSE), variance.model = list(model = "eGARCH", garchOrder = c(1,2)),distribution = "sstd")
+  
+  fit7 <- ugarchfit(spec7, centrada, solver = 'hybrid')
+  
+# ARMA(2,2)-EGARCH(1,2)
+  
+  spec8 <- ugarchspec(mean.model = list(armaOrder = c(2,2), include.mean = FALSE), variance.model = list(model = "eGARCH", garchOrder = c(1,2)),distribution = "sstd")
+  
+  fit8 <- ugarchfit(spec8, centrada, solver = 'hybrid')
+  
+  
+
+  dados<- data.frame(
+    Modelo=c("GARCH(1,1)","EGARCH(1,1)","EGARCH(1,2)","ARMA(1,1)-EGARCH(1,1)","ARMA(2,2)-EGARCH(1,1)","ARMA(1,1)-EGARCH(1,2)","ARMA(2,2)-EGARCH(1,2)"),
+                     AIC=c(round(infocriteria(fit1)[1],4),round(infocriteria(fit2)[1],4),round(infocriteria(fit6)[1],4),round(infocriteria(fit3)[1],4),round(infocriteria(fit4)[1],4),round(infocriteria(fit7)[1],4),round(infocriteria(fit8)[1],4)),
+                         BIC=c(round(infocriteria(fit1)[2],4),round(infocriteria(fit2)[2],4),round(infocriteria(fit6)[2],4),round(infocriteria(fit3)[2],4),round(infocriteria(fit4)[2],4),round(infocriteria(fit7)[2],4),round(infocriteria(fit8)[2],4)),
+    
+    Shibata=c(round(infocriteria(fit1)[3],4),round(infocriteria(fit2)[3],4),round(infocriteria(fit6)[3],4),round(infocriteria(fit3)[3],4),round(infocriteria(fit4)[3],4),round(infocriteria(fit7)[3],4),round(infocriteria(fit8)[3],4)),
+    
+    "Hannan-Quinn"=c(round(infocriteria(fit1)[4],4),round(infocriteria(fit2)[4],4),round(infocriteria(fit6)[4],4),round(infocriteria(fit3)[4],4),round(infocriteria(fit4)[4],4),round(infocriteria(fit7)[4],4),round(infocriteria(fit8)[4],4)))%>%
+  gt() %>%
+  tab_header(md("Tabela 3: Comparação de Critérios de Informação para Seleção do Melhor Modelo"))
+  
+
+  dados
+  
+```
+
+
+Para validar o desempenho do modelo escolhido, realizamos uma validação cruzada usando o Valor em Risco (VaR) e o Valor Esperado em Risco (ES) um passo à frente com $α$ de 0.01. Através dessa validação cruzada, fomos capazes de realizar vários testes para avaliar a adequação do modelo.
+
+Os resultados dos testes de validação foram bastante promissores, sugerindo que o modelo escolhido se ajusta bem aos dados, podemos ver o p-valor dos teste realizado na Tabela 4 (o código da Cross Validation foi executado em um documento a parte).
+
+
+```{r}
+
+dados2<-data.frame(Teste=c("Teste de cobertura incondicional de Kupiec","Teste de cobertura condicional de Christoffesen","Dynamic Quantile de Engle e Manganelli","Teste de déficit esperado de McNeil e Frey"),pvalor=c(0.3599,0.6503,0.9798,0.8542))%>%
+  gt() %>%
+  tab_header(md("Tabela 4: p-Valor dos Backtesting da Cross Validation"))
+  
+
+  dados2
+```
+
+
+Em conclusão, o modelo EGARCH(1,1) com distribuição skew student t demonstrou ser um modelo robusto para modelar a volatilidade dos retornos da ação UGPA3. Os testes de validação confirmaram a adequação do modelo. Portanto, essa pesquisa contribui para uma melhor compreensão da dinâmica do mercado de ações, especificamente no setor de petróleo e gás na B3.
+
+Referências {data-icon="fa-list" data-navmenu="Conclusão"}
+===
+ 
+#### Referências
+
+1. Anderson, T.W., & Darling, D.A. (1952). Asymptotic Theory of Certain "Goodness-of-Fit" Criteria Based on Stochastic Processes. The Annals of Mathematical Statistics, 23(2), 193-212.
+
+2. Bollerslev, T. (1986). Generalized Autoregressive Conditional Heteroskedasticity. Journal of Econometrics, 31(3), 307-327.
+
+3. Brockwell, P.J & Davis, R.A. (2016). Introduction to Time Series and Forecasting, 3rd editions, Springer.
+
+4. Cavalcanti, T., & Jalles, J. T. (2013). Macroeconomic effects of oil price shocks in Brazil and in the United States. Applied Energy, 104, 475-486.
+
+5. Christoffersen, P.F. (1998). Evaluating Interval Forecasts. International Economic Review, 39(4), 841-862.
+
+6. Engle, R.F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation. Econometrica, 50(4), 987-1008.
+
+7. Engle, R.F., & Manganelli, S. (2004). CAViaR: Conditional Autoregressive Value at Risk by Regression Quantiles. Journal of Business & Economic Statistics, 22(4), 367-381.
+
+8. Fattouh, B., Kilian, L., & Mahadeva, L. (2013). The Role of Speculation in Oil Markets: What Have We Learned So Far?. The Energy Journal, 34(3).
+
+9. Hamilton, J. D. (1994). Time Series Analysis (Vol. 2). Princeton University Press.
+
+10. Investopedia. (2022). Financial Markets Definition. Retrieved from https://www.investopedia.com/terms/f/financial-market.asp. Acesso: 25/06/2023
+
+11. Jorion, P. (2007). Value at Risk: The New Benchmark for Managing Financial Risk (3rd ed.). McGraw-Hill.
+
+12. Kupiec, P.H. (1995). Techniques for Verifying the Accuracy of Risk Measurement Models. The Journal of Derivatives, 3(2), 73-84.
+
+13. Ljung, G.M., & Box, G.E.P. (1978). On a Measure of Lack of Fit in Time Series Models. Biometrika, 65(2), 297-303.
+
+14. Massey Jr, F.J. (1951). The Kolmogorov-Smirnov Test for Goodness of Fit. Journal of the American Statistical Association, 46(253), 68-78.
+
+15. McNeil, A.J., & Frey, R. (2000). Estimation of Tail-Related Risk Measures for Heteroscedastic Financial Time Series: An Extreme Value Approach. Journal of Empirical Finance, 7(3-4), 271-300.
+
+16. Nelson, D.B. (1991). Conditional Heteroskedasticity in Asset Returns: A New Approach. Econometrica, 59(2), 347-370.
+
+17. Shapiro, S.S., & Wilk, M.B. (1965). An Analysis of Variance Test for Normality (Complete Samples). Biometrika, 52(3/4), 591-611.
+
+18. Silvennoinen, A., & Teräsvirta, T. (2009). Multivariate GARCH models. In Handbook of Financial Time Series (pp. 201-229). Springer.
