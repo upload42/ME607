@@ -10,7 +10,7 @@ Arquivo onde foi executado a Cross Validation: "Cross Validation.R"
 link do GitHub do grupo: https://github.com/upload42/ME607   
 Link do Shiny Onlines: https://antonio42.shinyapps.io/ShinyME607/#section-contexto  
 Arquivo que se atualiza diariamente está no Github com o nome "_previsao.csv"  
-O e-mail que está sendo enviado automaticamente e diariamente tem com título "ME607 - Previsão UGPA3"
+O e-mail que está sendo enviado automaticamente e diariamente tem o título "ME607 - Previsão UGPA3"
 
 Obs: 
 1.Os gráficos do Shiny podem demorar um pouco para renderizar  
