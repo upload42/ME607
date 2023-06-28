@@ -2,7 +2,6 @@ name: Teste2
 
 
 on:
-  on:
   schedule:
     - cron: "0 13 * * *" 
 
