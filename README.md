@@ -14,5 +14,6 @@ O e-mail que está sendo enviado automaticamente e diariamente tem o título **"
 
 Obs:  
 1.Os gráficos do Shiny podem demorar um pouco para renderizar  
-2. Verificar na caixa de spam o email automático
+2. O email está chegando aproximadamente às 10h45 na caixa de entrada  
+3. Verificar na caixa de spam o email automático
 
