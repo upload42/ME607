@@ -20,7 +20,7 @@ UGPA <- UGPA[-1,]
 centrada1 <- na.omit(UGPA$ret_adjusted_prices) - mean(UGPA$ret_adjusted_prices, na.rm = T)
 
 # EGarch(1,1) sstd
-spec1 <- ugarchspec(mean.model = list(armaOrder = c(3, 3), include.mean = FALSE),
+spec1 <- ugarchspec(mean.model = list(armaOrder = c(0, 0), include.mean = FALSE),
                     variance.model = list(model = 'eGARCH', garchOrder = c(1,1)),
                     distribution = 'sstd')
 
