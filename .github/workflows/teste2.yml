@@ -2,7 +2,9 @@ name: Teste2
 
 
 on:
-  workflow_dispatch:
+  on:
+  schedule:
+    - cron: "0 13 * * *" 
 
 jobs:
   test:
@@ -35,7 +37,7 @@ jobs:
       # Run Rscript    
       - name: Scraping
         run: |
-          Rscript Download_Data.R
+          Rscript Forecast.R
           
         # Add new files in folders and commit
       - name: Commit
