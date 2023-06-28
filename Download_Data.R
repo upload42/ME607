@@ -33,14 +33,14 @@ write_csv(new_forecast, file = paste0(new_forecast$data, "_previsao.csv"),
 #create_smtp_creds_file(file = "cred", user = "trabalho_series@outlook.com", provider = "outlook")
 
 
-corpo = compose_email(body = md("Antonio Felipe de Paula Nunes RA:213192"))
+corpo = compose_email(body = md("Previsão da ação UGPA3 um passo a frente, Grupo:Antonio Felipe de Paula Nunes RA:213192, Bianca Barbosa Schorles RA:232117, Lucas Tomaz RA:239931"))
 
 
 corpo %>% 
   add_attachment(file = "_previsao.csv",filename = "_previsao.csv") %>% 
   smtp_send(from = "trabalho_series@outlook.com",
-            to = c("a213192@dac.unicamp.br"),
-            subject = "Previsão UPGA3.SA",
+            to = c("a213192@dac.unicamp.br","b232117@dac.unicamp.br","l239931@dac.unicamp.br","ctrucios@unicamp.br"),
+            subject = "Previsão UGPA3.SA",
             credentials = creds_file("cred"))
 
 
