@@ -25,7 +25,7 @@ new_forecast = data.frame(data = Sys.Date() + 1,
                           previsao_sigma = round(forecast@forecast$sigmaFor[1], 4))
 
 # salva o novo arquivo .csv
-write_csv(new_forecast, file = paste0(new_forecast$data, "_previsao.csv"), 
+write_csv(new_forecast, file = "_previsao.csv", 
           append = FALSE, col_names = TRUE)
 
 
