@@ -1,5 +1,6 @@
 # ME607
 Grupo: Antonio Felipe de Paula Nunes RA:213192 |Bianca Barbosa Schorles RA:232117 |Lucas Tomaz RA:239931
+
 Ação escolhida para previsão: UGPA3
 
 Arquivo do Shiny: "Trabalho Final ME607.rmd"
