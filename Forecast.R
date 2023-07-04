@@ -39,7 +39,7 @@ corpo = compose_email(body = md("Previsão da ação da empresa Grupo Ultra (UGP
 corpo %>% 
   add_attachment(file = "_previsao.csv",filename = "_previsao.csv") %>% 
   smtp_send(from = "trabalho_series@outlook.com",
-            to = c("a213192@dac.unicamp.br","b232117@dac.unicamp.br","l239931@dac.unicamp.br","ctrucios@unicamp.br"),
+            to = c(),
             subject = "ME607 - Previsão UGPA3",
             credentials = creds_file("cred"))
 
